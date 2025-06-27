@@ -8,9 +8,10 @@ import re
 # ─── keep‑alive webserver ────────────────────────────────────────────────────────
 from flask import Flask, request
 import threading
+from collections import deque
 
 # in‑memory log buffer
-log_buffer = []
+log_buffer = deque(maxlen=100)
 
 app = Flask(__name__)
 
