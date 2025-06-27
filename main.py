@@ -19,7 +19,7 @@ app = Flask(__name__)
 def home():
     # show last 100 log lines
     return "<h1>Game Client Running</h1><pre>{}</pre>".format(
-        "\n".join(log_buffer[-100:])
+        "\n".join(log_buffer)
     )
 
 @app.route('/log', methods=['POST'])
