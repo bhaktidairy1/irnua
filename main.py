@@ -397,13 +397,13 @@ def main():
             try:
                 fur_qty_hex = inventory["fur"]["qty"].to_bytes(1, 'big').hex()
             except OverflowError:
-                fur_qty_hex = 'ff'
+                fur_qty_hex = '63'
 
             claw_id = inventory["claw"]["id"]
             try:
                 claw_qty_hex = (inventory["claw"]["qty"]).to_bytes(1, 'big').hex()
             except OverflowError:
-                claw_qty_hex = 'ff'
+                claw_qty_hex = '63'
             sword_id = inventory["sword"]["id"]
 
             if fur_id:
