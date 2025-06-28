@@ -394,11 +394,16 @@ def main():
             drain_socket(s)
             inventory = get_inventory_items(s)
             fur_id = inventory["fur"]["id"]
-            fur_qty_hex = (inventory["fur"]["qty"]).to_bytes(1, 'big').hex()
+            try:
+                fur_qty_hex = inventory["fur"]["qty"].to_bytes(1, 'big').hex()
+            except OverflowError:
+                fur_qty_hex = 'ff'
 
             claw_id = inventory["claw"]["id"]
-            claw_qty_hex = (inventory["claw"]["qty"]).to_bytes(1, 'big').hex()
-
+            try:
+                claw_qty_hex = (inventory["claw"]["qty"]).to_bytes(1, 'big').hex()
+            except OverflowError:
+                claw_qty_hex = 'ff'
             sword_id = inventory["sword"]["id"]
 
             if fur_id:
