@@ -384,8 +384,12 @@ def main():
     while True:
         count = count + 1
         if count % 4 == 0:
-            hex_send(s, "00060121" + inventory["dango"]["id"], "Eat Potion")
-            hex_recv(s, label="Potion-ACK")
+            try:
+                hex_send(s, "00060121" + inventory["dango"]["id"], "Eat Potion")
+                hex_recv(s, label="Potion-ACK")
+            except:
+                hex_send(s, "00060121" + "1247a387", "Emergency Eat Potion") #TODO change for specific sin
+                hex_recv(s, label="Potion-ACK")
         if count % 100 == 0:
             drain_socket(s)
             inventory = get_inventory_items(s)
