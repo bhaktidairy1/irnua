@@ -420,7 +420,7 @@ def main():
 
             hex_send(s, "000b2100000000010000243e19" , "Buy 25 dangos")
             hex_recv(s, label="Buy 25 dangos")
-            log(f"Sold fur: {inventory['fur']['qty']}  \n Sold claw: {inventory['claw']['qty']} ")
+            log(f"Sold fur: {fur_qty_hex}  \n Sold claw: {claw_qty_hex} ")
             log(f"Current Dango Amount:  {inventory['dango']['qty']}  ")
 
         cerbera_battle(s)
