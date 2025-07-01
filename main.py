@@ -37,7 +37,7 @@ def keep_alive():
     t.start()
 
 HOST = "202.239.51.41"
-PORT = 30001
+PORTS = [30001, 30002, 30003, 30004, 30005]
 
 
 CURRENT_COORDS = "00060101" + "55003800"
@@ -170,9 +170,8 @@ def cerbera_battle(s):
             print(f"[+] Parsed boss_id (fallback): {boss_id}")
         else:
             print("[-] Couldn't find boss_id, skipping attack")
-            exit()
-            return
-        time.sleep(0.1)
+            raise SystemExit
+        #time.sleep(0.1)   todo IS THIS SPEED UP FINE?
         # 4) Attack
         hex_send_NOPRINT(s,
             "000a01431b870102" + boss_id +
@@ -243,189 +242,204 @@ def extract_multiple_items_info(data: bytes, item_prefixes: list[str]):
     return results
 
 
-def main():
-    keep_alive()
-    token_with_prefix = "0020" + LOGIN_TOKEN_HEX + "0000"
-
-    # 1) Open TCP socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(5.0)
-    print(f"[+] Connecting to {HOST}:{PORT} …")
-    s.connect((HOST, PORT))
-    print("[+] Connected.\n")
-
-    # 2) Send “0002fff3” (Init Packet)
-    hex_send(s, "0002fff3", "Init Packet")
-    #    → server replies the init header
-    hex_recv(s, label="Init Header")
-
-    # 3) Send dynamic‐length login: [length][FF02][0020<token>0000]
-    raw_token = binascii.unhexlify(token_with_prefix)
-    payload = b"\xFF\x02" + raw_token
-    login_packet = len(payload).to_bytes(2, "big") + payload
-    s.sendall(login_packet)
-    print(f"→ Login Packet: {binascii.hexlify(login_packet).decode()}")
-
-    #  → server should reply first with “00000003ff0200”
-    data = hex_recv(s, label="Login ACK")
-    h = binascii.hexlify(data).decode()
-    if not h.startswith("00000003ff0200"):
-        print("[-] Unexpected login response:", h)
-        s.close()
-        return
-    print("[+] Login OK.\n")
-
-    #  → immediately after “00000003ff0200” comes the ff03 (+ char-info) packet
+def main(port):
     try:
-        s.settimeout(0.3)
-        extra = hex_recv(s, label="ff03 + char info")
-        hexed = binascii.hexlify(extra).decode()
-        idx = hexed.find("ff030100000001")
-        if idx != -1 and len(hexed) >= idx + 14 + 8:
-            char_id_hex = hexed[idx + 14 : idx + 14 + 8]
-            print(f"[+] Parsed char_id_hex: {char_id_hex}\n")
-        else:
-            print("[-] Couldn't locate char_id_hex in the ff03 packet.")
+        keep_alive()
+        token_with_prefix = "0020" + LOGIN_TOKEN_HEX + "0000"
+    
+        # 1) Open TCP socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(5.0)
+        print(f"[+] Connecting to {HOST}:{port} …")
+        s.connect((HOST, port))
+        print("[+] Connected.\n")
+    
+        # 2) Send “0002fff3” (Init Packet)
+        hex_send(s, "0002fff3", "Init Packet")
+        #    → server replies the init header
+        hex_recv(s, label="Init Header")
+    
+        # 3) Send dynamic‐length login: [length][FF02][0020<token>0000]
+        raw_token = binascii.unhexlify(token_with_prefix)
+        payload = b"\xFF\x02" + raw_token
+        login_packet = len(payload).to_bytes(2, "big") + payload
+        s.sendall(login_packet)
+        print(f"→ Login Packet: {binascii.hexlify(login_packet).decode()}")
+    
+        #  → server should reply first with “00000003ff0200”
+        data = hex_recv(s, label="Login ACK")
+        h = binascii.hexlify(data).decode()
+        if not h.startswith("00000003ff0200"):
+            print("[-] Unexpected login response:", h)
             s.close()
             return
-    except socket.timeout:
-        print("[-] Timeout waiting for ff03.")
-        s.close()
-        return
+        print("[+] Login OK.\n")
+    
+        #  → immediately after “00000003ff0200” comes the ff03 (+ char-info) packet
+        try:
+            s.settimeout(0.3)
+            extra = hex_recv(s, label="ff03 + char info")
+            hexed = binascii.hexlify(extra).decode()
+            idx = hexed.find("ff030100000001")
+            if idx != -1 and len(hexed) >= idx + 14 + 8:
+                char_id_hex = hexed[idx + 14 : idx + 14 + 8]
+                print(f"[+] Parsed char_id_hex: {char_id_hex}\n")
+            else:
+                print("[-] Couldn't locate char_id_hex in the ff03 packet.")
+                s.close()
+                return
+        except socket.timeout:
+            print("[-] Timeout waiting for ff03.")
+            s.close()
+            return
+        finally:
+            s.settimeout(5.0)
+    
+        # ─────────── From here on: replay the “correct” Character/World sequence ───────────
+        def send_and_log(pkt_hex, label=None, delay=0.1):
+            hex_send(s, pkt_hex, label=label)
+            time.sleep(delay)
+    
+        # 4) Character Select
+        send_and_log("0002f032", "Character Select")
+        #    → server: “0000009df032…” (character info)
+        hex_recv(s, label="Character Info")
+    
+        # 5) Enter World #1: “00060001” + <char_id_hex>
+        send_and_log("00060001", "Enter World")
+        send_and_log(char_id_hex, "Character ID")
+    
+        #    → server: “00000fd7…” (big map blob)
+        hex_recv(s, label="Map Data")
+    
+        # 6) Post‐Map: “000623f3” + <char_id_hex>
+        send_and_log("000623f3", "Post-Map")
+        send_and_log(char_id_hex, "Character ID Repeat")
+    
+        #    → server: “0000004323f300…” (world sync)
+        hex_recv(s, label="World Sync")
+    
+        # 7) Four movement‐handshake packets + “00026002”
+        for step in ["00023300", "00023303", "00023300", "00023303"]:
+            send_and_log(step, "Movement Step")
+        send_and_log("00026002", "Movement Step")
+    
+        #    → server: movement sync
+        hex_recv(s, label="Movement Sync")
+    
+        # 8) Presence start: “001bb300” + 24 zeros
+        send_and_log("001bb300", "Presence Start")
+        send_and_log("00000000000000000000000000000000000000000000000000", "Zeroes")
+    
+        # 9) Begin Sync: “0002013a” then “000e0110000318940000320000001000”
+        send_and_log("0002013a", "Begin Sync")
+        send_and_log("000e0110000099200000550000003800", "Position Data")         # MAP OF CERBERUS
+        #    → server: ack for position
+        hex_recv(s, label="Ack for Position")
+    
+        # 10) Resend Position: “0002013a”
+        send_and_log("0002013a", "Resend Position")
+        #    → server: extra state data
+        hex_recv(s, label="Extra State Data")
+    
+        # 11) Bulk Action: “000f3002”
+        send_and_log("000f3002", "Bulk Action")
+        send_and_log("1100000000000000000000992000023209", "Bulk Action Contd.")
+    
+        # 12) Trigger Motion: “00020160”
+        send_and_log("00020160", "Trigger Motion")
+        #    → server: motion ack
+        hex_recv(s, label="Motion Ack")
+    
+        # 13) Visuals Setup: “00038404”
+        send_and_log("00038404", "Visuals Setup")
+        send_and_log("00", "Visual Padding")
+        # there supposed to be a 00028100000281100002830000028200 in between here
+        # 14) Presence Confirm: “00060202” + <char_id_hex>
+        send_and_log("00060202" + char_id_hex, "Presence Confirm")
+        #    → server: presence ack
+        hex_recv(s, label="Presence Ack")
+    
+        # 15) World Tick: “00033006”
+        send_and_log("00033006", "World Tick")
+    
+        # 16) Trigger Something: “01000f300211000000020000000000031894”
+        send_and_log("01000f300211000000050000000000001554", "Trigger Something")
+        #    → server: update
+        hex_recv(s, label="Server Update")
+    
+        # 17) Char “idle + coords” right away:
+        #     “00067110” + <char_id_hex> + coords packet
+        send_and_log("00067110" + char_id_hex + CURRENT_COORDS, "Char Idle + Coords")
+    
+        print("\n[+] Game session established. Starting packet loop and GUI…\n")
+        print("[+] Entering infinite cerbera Battle loop")
+    
+        # hex_send(s, "000b210100000001139ee75102", "Sell 2 fur")   000b2100000000010000243e14
+        drain_socket(s)  # Clean buffer
+        inventory = get_inventory_items(s)
+    
+    
+        count = 89
+        while True:
+            count = count + 1
+            if count % 4 == 0:
+                try:
+                    hex_send(s, "00060121" + inventory["dango"]["id"], "Eat Potion")
+                    hex_recv(s, label="Potion-ACK")
+                except:
+                    hex_send(s, "00060121" + "1247a387", "Emergency Eat Potion") #TODO change for specific sin
+                    hex_recv(s, label="Potion-ACK")
+            if count % 100 == 0:
+                drain_socket(s)
+                inventory = get_inventory_items(s)
+                fur_id = inventory["fur"]["id"]
+                try:
+                    fur_qty_hex = inventory["fur"]["qty"].to_bytes(1, 'big').hex()
+                except OverflowError:
+                    fur_qty_hex = '63'
+    
+                claw_id = inventory["claw"]["id"]
+                try:
+                    claw_qty_hex = (inventory["claw"]["qty"]).to_bytes(1, 'big').hex()
+                except OverflowError:
+                    claw_qty_hex = '63'
+                sword_id = inventory["sword"]["id"]
+    
+                if fur_id:
+                    hex_send(s, "000b210100000001" + fur_id + fur_qty_hex, "Sell Fur")
+                    hex_recv(s, label="Sell fur -ACK Must be 3210100")
+    
+                if claw_id:
+                    hex_send(s, "000b210100000001" + claw_id + claw_qty_hex, "Sell Claw")
+                    hex_recv(s, label="Sell claw -ACK Must be 3210100")
+    
+                if sword_id:
+                    hex_send(s, "000b210100000001" + sword_id + "01", "Sell Sword")
+                    hex_recv(s, label="Sell sword -ACK Must be 3210100")
+    
+                hex_send(s, "000b2100000000010000243e19" , "Buy 25 dangos")
+                hex_recv(s, label="Buy 25 dangos")
+                log(f"Sold fur: {fur_qty_hex}  \n Sold claw: {claw_qty_hex} ")
+                log(f"Current Dango Amount:  {inventory['dango']['qty']}  ")
+    
+            cerbera_battle(s)
+            log(f"Battle Number: {count}  Finished")
     finally:
-        s.settimeout(5.0)
-
-    # ─────────── From here on: replay the “correct” Character/World sequence ───────────
-    def send_and_log(pkt_hex, label=None, delay=0.1):
-        hex_send(s, pkt_hex, label=label)
-        time.sleep(delay)
-
-    # 4) Character Select
-    send_and_log("0002f032", "Character Select")
-    #    → server: “0000009df032…” (character info)
-    hex_recv(s, label="Character Info")
-
-    # 5) Enter World #1: “00060001” + <char_id_hex>
-    send_and_log("00060001", "Enter World")
-    send_and_log(char_id_hex, "Character ID")
-
-    #    → server: “00000fd7…” (big map blob)
-    hex_recv(s, label="Map Data")
-
-    # 6) Post‐Map: “000623f3” + <char_id_hex>
-    send_and_log("000623f3", "Post-Map")
-    send_and_log(char_id_hex, "Character ID Repeat")
-
-    #    → server: “0000004323f300…” (world sync)
-    hex_recv(s, label="World Sync")
-
-    # 7) Four movement‐handshake packets + “00026002”
-    for step in ["00023300", "00023303", "00023300", "00023303"]:
-        send_and_log(step, "Movement Step")
-    send_and_log("00026002", "Movement Step")
-
-    #    → server: movement sync
-    hex_recv(s, label="Movement Sync")
-
-    # 8) Presence start: “001bb300” + 24 zeros
-    send_and_log("001bb300", "Presence Start")
-    send_and_log("00000000000000000000000000000000000000000000000000", "Zeroes")
-
-    # 9) Begin Sync: “0002013a” then “000e0110000318940000320000001000”
-    send_and_log("0002013a", "Begin Sync")
-    send_and_log("000e0110000099200000550000003800", "Position Data")         # MAP OF CERBERUS
-    #    → server: ack for position
-    hex_recv(s, label="Ack for Position")
-
-    # 10) Resend Position: “0002013a”
-    send_and_log("0002013a", "Resend Position")
-    #    → server: extra state data
-    hex_recv(s, label="Extra State Data")
-
-    # 11) Bulk Action: “000f3002”
-    send_and_log("000f3002", "Bulk Action")
-    send_and_log("1100000000000000000000992000023209", "Bulk Action Contd.")
-
-    # 12) Trigger Motion: “00020160”
-    send_and_log("00020160", "Trigger Motion")
-    #    → server: motion ack
-    hex_recv(s, label="Motion Ack")
-
-    # 13) Visuals Setup: “00038404”
-    send_and_log("00038404", "Visuals Setup")
-    send_and_log("00", "Visual Padding")
-    # there supposed to be a 00028100000281100002830000028200 in between here
-    # 14) Presence Confirm: “00060202” + <char_id_hex>
-    send_and_log("00060202" + char_id_hex, "Presence Confirm")
-    #    → server: presence ack
-    hex_recv(s, label="Presence Ack")
-
-    # 15) World Tick: “00033006”
-    send_and_log("00033006", "World Tick")
-
-    # 16) Trigger Something: “01000f300211000000020000000000031894”
-    send_and_log("01000f300211000000050000000000001554", "Trigger Something")
-    #    → server: update
-    hex_recv(s, label="Server Update")
-
-    # 17) Char “idle + coords” right away:
-    #     “00067110” + <char_id_hex> + coords packet
-    send_and_log("00067110" + char_id_hex + CURRENT_COORDS, "Char Idle + Coords")
-
-    print("\n[+] Game session established. Starting packet loop and GUI…\n")
-    print("[+] Entering infinite cerbera Battle loop")
-
-    # hex_send(s, "000b210100000001139ee75102", "Sell 2 fur")   000b2100000000010000243e14
-    drain_socket(s)  # Clean buffer
-    inventory = get_inventory_items(s)
-
-
-    count = 89
-    while True:
-        count = count + 1
-        if count % 4 == 0:
-            try:
-                hex_send(s, "00060121" + inventory["dango"]["id"], "Eat Potion")
-                hex_recv(s, label="Potion-ACK")
-            except:
-                hex_send(s, "00060121" + "1247a387", "Emergency Eat Potion") #TODO change for specific sin
-                hex_recv(s, label="Potion-ACK")
-        if count % 100 == 0:
-            drain_socket(s)
-            inventory = get_inventory_items(s)
-            fur_id = inventory["fur"]["id"]
-            try:
-                fur_qty_hex = inventory["fur"]["qty"].to_bytes(1, 'big').hex()
-            except OverflowError:
-                fur_qty_hex = '63'
-
-            claw_id = inventory["claw"]["id"]
-            try:
-                claw_qty_hex = (inventory["claw"]["qty"]).to_bytes(1, 'big').hex()
-            except OverflowError:
-                claw_qty_hex = '63'
-            sword_id = inventory["sword"]["id"]
-
-            if fur_id:
-                hex_send(s, "000b210100000001" + fur_id + fur_qty_hex, "Sell Fur")
-                hex_recv(s, label="Sell fur -ACK Must be 3210100")
-
-            if claw_id:
-                hex_send(s, "000b210100000001" + claw_id + claw_qty_hex, "Sell Claw")
-                hex_recv(s, label="Sell claw -ACK Must be 3210100")
-
-            if sword_id:
-                hex_send(s, "000b210100000001" + sword_id + "01", "Sell Sword")
-                hex_recv(s, label="Sell sword -ACK Must be 3210100")
-
-            hex_send(s, "000b2100000000010000243e19" , "Buy 25 dangos")
-            hex_recv(s, label="Buy 25 dangos")
-            log(f"Sold fur: {fur_qty_hex}  \n Sold claw: {claw_qty_hex} ")
-            log(f"Current Dango Amount:  {inventory['dango']['qty']}  ")
-
-        cerbera_battle(s)
-        log(f"Battle Number: {count}  Finished")
-
+        print(f"[i] Closing socket for port {port}")
+        s.close()
+    
 
 if __name__ == "__main__":
-    main()
+    port_index = 0
+    while True:
+        try:
+            main(PORTS[port_index])
+        except SystemExit:
+            print(f"[!] Switching to next port due to boss_id error.")
+            port_index = (port_index + 1) % len(PORTS)
+            time.sleep(2)  # Optional: wait before reconnecting
+            continue
+        except Exception as e:
+            print(f"[!] Unexpected crash: {e}")
+            break
