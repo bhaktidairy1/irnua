@@ -136,11 +136,8 @@ def get_inventory_items(sock) -> dict:
 
     for prefix, item_id, qty in results:
         key = prefix_to_key.get(prefix)
-        if key:
-            itemList[key] = {
-                "id": item_id,  # ← actual item ID from packet
-                "qty": qty
-            }
+        if itemList[key]["id"] is None:
+            itemList[key] = {"id": item_id, "qty": qty}
 
     return itemList
 
