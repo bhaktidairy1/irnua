@@ -21,7 +21,7 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     # display current money count and last 100 log lines
-    return "<h1>Kit Money: {}</h1><pre>{}</pre>".format(
+    return "<h1>Kit Money: {:,}</h1><pre>{}</pre>".format(
         global_money,
         "\n".join(log_buffer)
     )
