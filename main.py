@@ -256,7 +256,6 @@ def cerbera_battle(s):
 
     except Exception as e:
         print("[!] cerbera Battle error:", e)
-        time.sleep(240)
         raise SystemExit
 def extract_multiple_items_info(data: bytes, item_prefixes: list[str]):
     """
