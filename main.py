@@ -491,6 +491,7 @@ def main(port):
     finally:
         print(f"[i] Closing socket for port {port}")
         s.close()
+        time.sleep(180)
     
 
 if __name__ == "__main__":
