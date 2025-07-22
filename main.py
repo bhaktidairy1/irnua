@@ -49,9 +49,10 @@ CURRENT_COORDS = "00060101" + "55003800"
 # === LOGIN TOKEN HANDLING ===
 session = requests.Session()
 mageurl = (
-    "http://gae4php82-real.an.r.appspot.com//_ah/login"
-    "?continue=http://gae4php82-real.an.r.appspot.com/authcreate"
-    "&auth=g.a000wAg3iftvk-euOJRxic1Iz9MdFcDjG23v9ofi14FohWmNePUkwHZODEy5lYYzbb4pliQF_gACgYKAdISARMSFQHGX2Mi1J8oW2jFnkPxpg7ddhDnrBoVAUF8yKoSiUXE-DtoK7ZoQYmrhtSw0076"
+#18test
+
+    "https://gae4php82-real.an.r.appspot.com/_ah/login?continue=https://gae4php82-real.an.r.appspot.com/authcreate&auth=g.a000zAiAfivUUxtcyVs5_EGR9BI09LGvLKPj0lbhhCblw98ypmEE5VINxmGjr0GAgDNtwwuvHQACgYKAa4SARQSFQHGX2Mi7o4qoZPi7VW5q95w1hmfGBoVAUF8yKrkoRHwaZ_1nq71FG_iXZGV0076"
+
 )
 session.get(mageurl, allow_redirects=True)
 base = f"{urlparse(mageurl).scheme}://{urlparse(mageurl).netloc}"
@@ -215,7 +216,6 @@ def cerbera_battle(s):
         else:
             print("[-] Couldn't find boss_id, skipping attack")
             raise SystemExit
-        #time.sleep(0.1)   todo IS THIS SPEED UP FINE?
         # 4) Attack
         hex_send_NOPRINT(s,
             "000a01431b870102" + boss_id +
@@ -417,7 +417,7 @@ def main(port):
         #     “00067110” + <char_id_hex> + coords packet
         send_and_log("00067110" + char_id_hex + CURRENT_COORDS, "Char Idle + Coords")
 
-        send_and_log("0006a102" + "4863b9fd", "Summon Pet")    #for each sin TODO
+        send_and_log("0006a102" + "0a536791", "Summon Pet")    #for each sin TODO
         #    → server: update
         hex_recv(s, label="Summon Pet")
     
@@ -437,7 +437,7 @@ def main(port):
                     hex_send(s, "00060121" + inventory["dango"]["id"], "Eat Potion")
                     hex_recv(s, label="Potion-ACK")
                 except:
-                    hex_send(s, "00060121" + "1247a387", "Emergency Eat Potion") #TODO change for specific sin
+                    hex_send(s, "00060121" + "016811a4", "Emergency Eat Potion") #TODO change for specific sin
                     hex_recv(s, label="Potion-ACK")
             if count % 100 == 0:
                 drain_socket(s)
